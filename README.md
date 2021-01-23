@@ -1,0 +1,2 @@
+# gingerOS
+ Educational and HobbyOS
