@@ -1,0 +1,10 @@
+ctype_objs=\
+$(ctype_dir)\isalpha.o\
+$(ctype_dir)\isdigit.o\
+$(ctype_dir)\islower.o\
+$(ctype_dir)\isspace.o\
+$(ctype_dir)\isupper.o\
+$(ctype_dir)\tolower.o\
+$(ctype_dir)\tolowerstr.o\
+$(ctype_dir)\toupper.o\
+$(ctype_dir)\toupperstr.o
