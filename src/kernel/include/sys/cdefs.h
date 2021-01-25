@@ -14,5 +14,7 @@ typedef int dev_t;
 typedef int mode_t;
 typedef int gid_t;
 typedef int uid_t;
+typedef uid_t uuid_t;
 typedef int id_t;
+typedef unsigned long ulong_t;
 #endif

@@ -1,9 +1,0 @@
-posix_objs=\
-#$(posix_dir)\open.o\
-#$(posix_dir)\close.o\
-#$(posix_dir)\read.o\
-#$(posix_dir)\readdir.o\
-#$(posix_dir)\write.o\
-#$(posix_dir)\ioctl.o\
-#$(posix_dir)\lseek.o\
-#$(posix_dir)\helpers.o
