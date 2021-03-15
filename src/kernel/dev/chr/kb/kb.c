@@ -132,22 +132,22 @@ size_t ps2kbd_read(struct devid *dev __unused, off_t offset, size_t _size, void 
     return size;
 }
 
-int ps2kbd_open(file_t *file __unused, mode_t mode __unused)
+int ps2kbd_open(struct file *file __unused, mode_t mode __unused)
 {
     kprintfailure("ps2kbd open not ready\n");
     return -EINVAL;
 }
 
-int ps2kbd_fread(file_t *file, void *buf, size_t _size)
+int ps2kbd_fread(struct file *file, void *buf, size_t _size)
 {
-    if(file->offset >= MAX_KBD)
+    if(file->foffset >= MAX_KBD)
         return (-1);
     size_t size = MIN(_size, MAX_KBD);
-    memcpy(buf, ps2kbd_buf.buf + file->offset, size);
+    memcpy(buf, ps2kbd_buf.buf + file->foffset, size);
     return size;
 }
 
-int ps2kbd_close(file_t *file __unused)
+int ps2kbd_close(struct file *file __unused)
 {
     kprintfailure("ps2kbd close not ready\n");
     return -EINVAL;

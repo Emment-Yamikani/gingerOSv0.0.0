@@ -1,10 +1,10 @@
-#include <sys\mutex.h>
-#include <arch\x86\cpu\x86io.h>
-#include <stdbool.h>
+#include <fs/fs.h>
 #include <string.h>
-#include <dev\dev.h>
 #include <system.h>
-#include <fs\vfs.h>
+#include <stdbool.h>
+#include <dev/dev.h>
+#include <sys/mutex.h>
+#include <arch/x86/cpu/x86io.h>
 
 #define max_cols 80
 #define max_rows 25
@@ -221,14 +221,14 @@ int cons_probe()
     return 0;
 }
 
-size_t cons_fwrite(file_t *file, void *buf, size_t _size)
+size_t cons_fwrite(struct file *file, void *buf, size_t _size)
 {
-    size_t size = MIN(_size, console_buffsz - file->offset);
+    size_t size = MIN(_size, console_buffsz - file->foffset);
     size = (size_t)console_write((char *)buf, size);
     return size;
 }
 
-int cons_fclose(file_t *file)
+int cons_fclose(struct file *file)
 {
 
 }
@@ -240,10 +240,10 @@ struct dev consdev = {
     .read = __never,
     .write = console_write,
     .fops = {
-        .open = __never,
-        .read = __never,
-        .write = cons_fwrite,
-        .close = cons_fclose
+        .fopen = __never,
+        .fread = __never,
+        .fwrite = cons_fwrite,
+        .fclose = cons_fclose
     }
 };
 

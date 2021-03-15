@@ -3,6 +3,8 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
+#include <dev/console/console.h>
+
 
 #define DEC 0
 #define BIN 1
@@ -11,6 +13,12 @@
 
 void panic(const char *fmt, ...)
 {
+    printf("\n[");
+    cons_setforecolor(red);
+    cons_update_color();
+    printf("!PANIC!");
+    cons_restore_color();
+    printf("]");
     va_list list;
     va_start(list, fmt);
     kvprintf(fmt, list);

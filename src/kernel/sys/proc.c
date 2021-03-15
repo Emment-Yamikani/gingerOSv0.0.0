@@ -6,9 +6,9 @@ int proc_get_fd(proc_t *p)
 {
     for(int i=0; i < MAX_FDS; ++i)
     {
-        if(!p->fd[i].inode)
+        if(!p->fd[i].fnode)
         {
-            p->fd[i].inode = (inode_t *)(-1);
+            p->fd[i].fnode = (inode_t *)(-1);
             return i;
         }
     }
@@ -19,6 +19,6 @@ int proc_release_fd(proc_t *p, int fd)
 {
     if(fd >= MAX_FDS)
         return -EBADF;
-    p->fd[fd].inode = (inode_t *)(NULL);
+    p->fd[fd].fnode = (inode_t *)(NULL);
     return 0;
 }

@@ -4,8 +4,8 @@
 #include <stdarg.h>
 #include <string.h>
 #include <system.h>
-#include<dev\console\console.h>
-#include <system.h>
+#include <stdbool.h>
+#include<dev/console/console.h>
 
 
 int kvprintf(const char *fmt, va_list list)
@@ -26,13 +26,17 @@ int kvprintf(const char *fmt, va_list list)
         {
         case 'b':
             _int = va_arg(list, unsigned int);
-            str = int_str(_int, 1, 0, BIN);
+            str = int_str(_int, 1, 0, false, BIN);
+            len += puts(str);
+            break;
+        case 'd':
+            _int = va_arg(list, unsigned int);
+            str = int_str(_int, 1, 0, true, DEC);
             len += puts(str);
             break;
         case 'D':
-        case 'd':
             _int = va_arg(list, unsigned int);
-            str = int_str(_int, 1, 0, DEC);
+            str = int_str(_int, 1, 0, false, DEC);
             len += puts(str);
             break;
         case 'f':
@@ -42,18 +46,18 @@ int kvprintf(const char *fmt, va_list list)
             break;
         case 'o':
             _int = va_arg(list, unsigned int);
-            str = int_str(_int, 1, 0, OCT);
+            str = int_str(_int, 1, 0, false, OCT);
             len += puts(str);
             break;
         case 'p':
         case 'x':
             _int = va_arg(list, unsigned int);
-            str = int_str(_int, 0, 0, HEX);
+            str = int_str(_int, 0, 0, false, HEX);
             len += puts(str);
             break;
         case 'X':
             _int = va_arg(list, unsigned int);
-            str = int_str(_int, 0, 1, HEX);
+            str = int_str(_int, 0, 1, false, HEX);
             len += puts(str);
             break;
         case 's':
@@ -86,7 +90,7 @@ void _Kprintfailure()
     putchar('[');
     cons_setforecolor(red);
     cons_update_color();
-    printf(" FAILURE ");
+    printf(" FAILED ");
     cons_restore_color();
     printf("] ");
 }
@@ -124,4 +128,23 @@ void kprintprompt(const char *usr, const char *cwd)
     printf(cwd);
     cons_restore_color();
     printf("]$ ");
+}
+
+char **canonicalize_path(const char *const path)
+{
+    /* Tokenize slash seperated words in path into tokens */
+    char **tokens = tokenize(path, '/');
+    return tokens;
+}
+
+int kprintemphasis(color_t color, const char *fmt, ...)
+{
+    cons_setforecolor(color);
+    cons_update_color();
+    va_list list;
+    va_start(list, fmt);
+    int len = kvprintf(fmt, list);
+    va_end(list);
+    cons_restore_color();
+    return len;
 }

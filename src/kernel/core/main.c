@@ -3,44 +3,49 @@
 #include <system.h>
 #include <string.h>
 #include <stdlib.h>
-#include <fs\vfs.h>
-#include <sys\usr.h>
-#include <dev\dev.h>
-#include <sys\fcntl.h>
-#include <sys\panic.h>
-#include <sys\unistd.h>
-#include <mm\kmalloc.h>
-#include <core\module.h>
-#include <fs\ramfs\ramfs.h>
-#include <dev\console\console.h>
+#include <fs/fs.h>
+#include <sys/usr.h>
+#include <dev/dev.h>
+#include <sys/fcntl.h>
+#include <sys/panic.h>
+#include <sys/unistd.h>
+#include <mm/kmalloc.h>
+#include <core/module.h>
+#include <fs/ramfs.h>
+#include <dev/console/console.h>
 
 
 char buf[512];
-extern void addnam();
+
+
 void main()
 {
     modules_init();
     vfs_init();
     load_ramdisk();
-    cons_lcyan();
-    printf("\n                       Welcome to %sOs-%s\n", OSNAME, OSVERSION);
-    cons_cyan();
-    printf("                          Liveliness and energy\n");
+    kprintemphasis(lcyan, "\n                       Welcome to %sOs-%s\n", OSNAME, OSVERSION);
+    kprintemphasis(cyan, "                          Liveliness and energy\n");
     cons_reset();
 
     kprintprompt(cur_usr->name, cur_usr->cwd);
 
-    addnam();
     printf("\n");
-    char *path = "fin/bin/osinfo.txt";
-    int fd = open(path, O_RDONLY);
-    if(fd < 0){
-        kprintfailure("ERROR(%X), couldn't open: \'%s\'\n", fd, path);
-        goto skip_read;
+
+    int ret =0;
+    if ((ret = open("osinfo.txt", O_RDONLY)) < 0)
+    {
+        kprintfailure("could not open file, error code=%d\n", ret);
+        goto sti;
     }
-    read(fd, buf, sizeof(buf));
-    printf(buf);
-    skip_read:
+    if((ret = read(ret, buf, 511)) < 0){
+        kprintfailure("could not read file, error code=%d\n", ret);
+        goto sti;
+    }
+
+    printf("\n-----------------------------------SYSTEM INFO----------------------------------");
+    kprintemphasis(cyan, buf);
+    printf("\n--------------------------------------------------------------------------------");
+sti:
     sti();
     for(;;);
 }

@@ -1,9 +1,9 @@
 #ifndef SYS_PROCESS_H
 # define SYS_PROCESS_H
-#include <mm\vm.h>
+#include <mm/vm.h>
 #include <stdint.h>
-#include <fs\vfs.h>
-#include <sys\cdefs.h>
+#include <fs/fs.h>
+#include <sys/cdefs.h>
 
 
 #define MAX_FDS 32

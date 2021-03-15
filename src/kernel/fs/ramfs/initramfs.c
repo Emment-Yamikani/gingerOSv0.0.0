@@ -1,14 +1,13 @@
 #include <string.h>
 #include <system.h>
-#include <fs\vfs.h>
-#include <fs\vfs.h>
-#include <dev\dev.h>
-#include <ds\queue.h>
-#include <sys\errno.h>
-#include <sys\panic.h>
-#include <sys\cdefs.h>
-#include <boot\boot.h>
-#include <mm\kmalloc.h>
+#include <fs/fs.h>
+#include <dev/dev.h>
+#include <ds/queue.h>
+#include <sys/errno.h>
+#include <sys/panic.h>
+#include <sys/cdefs.h>
+#include <boot/boot.h>
+#include <mm/kmalloc.h>
 
 
 
@@ -30,26 +29,18 @@ void load_ramdisk()
     extern size_t ramdev_sz;
 
     *ramdisk_dev_node = (struct inode){
-        .name = "ramdev",
-
-        .type = FS_BLKDEV,
-        .rdev = _DEV_T(0, 0),
-
-        .size = ramdev_sz,
+        .itype = BLKDEV,
+        .irdev = _DEV_T(0, 0),
+        .isize = ramdev_sz,
     };
 
-    struct inode *root = NULL;
+    struct dentry *root = NULL;
     int err = -1;
-    root = (inode_t *)kmalloc(sizeof(inode_t));
-    if(!root){
-        kprintfailure("failed to load ramdisk!\n");
-        return;
-    }
     
     forlinked(node, archivers->head, node->next)
     {
         struct fs *fs = node->value;
-        if (!(err = fs->load(ramdisk_dev_node, &root)))
+        if (!(err = fs->fs_load(ramdisk_dev_node, &root)))
             break;
     }
 

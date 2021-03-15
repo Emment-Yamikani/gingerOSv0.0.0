@@ -1,13 +1,13 @@
 #include <stdio.h>
-#include <mm\vm.h>
-#include <mm\pm.h>
-#include <fs\vfs.h>
-#include <sys\usr.h>
-#include <dev\dev.h>
-#include <boot\boot.h>
-#include <fs\ramfs\ramfs.h>
-#include <dev\console\console.h>
-#include <arch\x86\chipset\chipset.h>
+#include <mm/vm.h>
+#include <mm/pm.h>
+#include <fs/fs.h>
+#include <sys/usr.h>
+#include <dev/dev.h>
+#include <boot/boot.h>
+#include <fs/ramfs.h>
+#include <dev/console/console.h>
+#include <arch/x86/chipset/chipset.h>
 
 boot_t boot_info;
 extern void main();

@@ -22,7 +22,7 @@ uint16_t *memsetw(uint16_t *dest, uint16_t val, uint32_t count);
 //length of string
 void swap(char *c, char *d);
 void reverse(char *str);
-char *int_str(unsigned int n, int space, int type, int base);
+char *int_str(unsigned int n, int space, int type, int _signed, int base);
 int strcmp(const char *str1, const char *str0);
 size_t strlen(const char*);
 char *strcat(char str1[], const char str0[]);

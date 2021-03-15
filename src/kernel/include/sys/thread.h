@@ -1,8 +1,8 @@
 #ifndef SYS_THREAD_H
 # define SYS_THREAD_H
 #include <stdint.h>
-#include <sys\cdefs.h>
-#include <sys\process.h>
+#include <sys/cdefs.h>
+#include <sys/process.h>
 
 typedef enum
 {

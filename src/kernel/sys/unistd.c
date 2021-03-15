@@ -2,13 +2,13 @@
 #include <stddef.h>
 #include <string.h>
 #include <system.h>
-#include <fs\vfs.h>
-#include <sys\cdefs.h>
-#include <sys\errno.h>
-#include <sys\fcntl.h>
-#include <mm\kmalloc.h>
+#include <fs/fs.h>
+#include <sys/cdefs.h>
+#include <sys/errno.h>
+#include <sys/fcntl.h>
+#include <mm/kmalloc.h>
 
-#define SYSFDSMAX 128
+#define SYSFDSMAX 64
 
 static file_t *sys_fds = NULL;
 
@@ -26,9 +26,9 @@ int sys_getfd()
         return -EINVAL;
     for(int i=0; i < SYSFDSMAX; ++i)
     {
-        if(!sys_fds[i].inode)
+        if(!sys_fds[i].fnode)
         {
-            sys_fds[i].inode = (inode_t *)(-1);
+            sys_fds[i].fnode = (inode_t *)(-1);
             return i;
         }
     }
@@ -39,60 +39,32 @@ void sys_releasefd(int fd)
 {
     if ((fd >= SYSFDSMAX) || !sys_fds)
         return;
-    sys_fds[fd].inode =0;
-    sys_fds[fd].offset =0;
-    sys_fds[fd].flags =0;
+    sys_fds[fd].fnode =0;
+    sys_fds[fd].foffset =0;
+    sys_fds[fd].fflags =0;
 }
 
 int open(const char *path, int mode)
 {
     int fd = sys_getfd();
     if( fd == -ENOFDS)
-    return -ENOFDS;
-    
-    vnode_t vnode;
-    inode_t *inode = NULL;
-    char * abs_path;
-    kprintfOKmsg("opening file %s\n", path);
-    int ret = vfs_lookup(path, &vnode, &abs_path);
-    printf("abspath=%s\n", abs_path);
-    if(ret){//not found, so create
-        kprintfailure("not found, creating it...\n");
-        if((ret == -ENOENT) && (mode & O_CREAT))
-        {
-            if((ret = vfs_creat(path, &inode))){
-                kprintfailure("failed to creat %s\n", path);
-                goto error;
-            }
-            goto o_creat;
-        }
-    }
+        return -ENOFDS;
+    int ret = -EINVAL;
 
-    ret = vfs_vget(&vnode, &inode);
+    dentry_t *dentry = NULL;
+    if(ret = vfs_lookup(path, &dentry))
+        printf("fialed to open file [%s]\n", path);
 
-    if(ret)
-        goto error;
-
-o_creat:
-    kprintfOKmsg("O_CREATing\n");
-    sys_fds[fd] = (file_t){
-        .flags = mode,
-        .inode = inode,
-        .offset =0
-    };
-
-    ret = vfs_fopen(&sys_fds[fd]);
-
-error:
-    kprintfailure("error occured\n");
-    if(ret < 0){
-    sys_releasefd(fd);
-        if(inode)
-            kfree((void *)inode);
-        return -EINVAL;
-    }
-    else ret = fd;
-    return ret;
+    sys_fds[fd].fflags = FD_VALID;
+    sys_fds[fd].fmode = mode;
+    sys_fds[fd].fname = path;
+    sys_fds[fd].fnode = dentry->dnode;
+    sys_fds[fd].foffset = 0;
+    /*sys_fds[fd].fpath->dentry = dentry;
+    sys_fds[fd].fpath->mnt->mnt_flags;
+    sys_fds[fd].fpath->mnt->mnt_root;
+    sys_fds[fd].fpath->mnt->mnt_sb = dentry->dnode->isb;*/
+    return fd;
 }
 
 int creat(const char *path, int mode)
@@ -102,9 +74,11 @@ int creat(const char *path, int mode)
 
 size_t read(int fd, void *buf, size_t size)
 {
-    if(fd >= SYSFDSMAX)
+    if((unsigned int)fd >= SYSFDSMAX)
         return -EBADFD;
     file_t *file = &sys_fds[fd];
+    if(!(file->fflags && FD_VALID))
+        return -EINVAL;
     return vfs_fread(file, buf, size);
 }
 

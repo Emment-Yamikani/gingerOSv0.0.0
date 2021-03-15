@@ -1,126 +1,164 @@
 #include <stdio.h>
 #include <string.h>
 #include <system.h>
-#include <fs\vfs.h>
-#include <ds\hash.h>
-#include <dev\dev.h>
-#include <sys\usr.h>
-#include <sys\errno.h>
-#include <sys\fcntl.h>
-#include <sys\panic.h>
-#include <mm\kmalloc.h>
-#include <dev\console\console.h>
+#include <fs/fs.h>
+#include <dev/dev.h>
+#include <sys/usr.h>
+#include <sys/errno.h>
+#include <sys/fcntl.h>
+#include <sys/panic.h>
+#include <mm/kmalloc.h>
+#include <dev/console/console.h>
 
-#define VFS_HASHMAX 13
 
-fs_list_t   *registered_fs = NULL;
-
-typedef struct _vfs_hash vfs_hash_t;
-static struct _vfs_hash
-{
-    char *name; //full pathname
-    inode_t *node;
-    hash_node_t *children; // table of children if isdir
-}vfs_root = {
-    .name = "/"
-};
+struct fs_list *registered_fs;
+/*virtual filesystem root*/
+struct dentry *vroot;
 
 extern int sysfile_io();
+
 
 void vfs_init()
 {
     kprintfOKmsg("initializing vfs...\n");
-    vfs_root.children = mkhash_table(VFS_HASHMAX);
-    inode_t inode;
-    
-    int err;
-    if((err = sysfile_io()))
+    if(sysfile_io())
         panic("little or no memory is available to initialize vfs\n");
 }
 
-vfs_hash_t fin, bin;
-void addnam()
+int vfs_registerfs(fs_t *fs)
 {
-    fin.name = "fin";
-    fin.children = mkhash_table(VFS_HASHMAX);
-    int key = mkhashkey_str(fin.name);
-    hash_insert(vfs_root.children, VFS_HASHMAX, key, (void *)&fin);
-
-    bin.name = "bin";
-    key = mkhashkey_str(bin.name);
-    hash_insert(fin.children, VFS_HASHMAX, key, (void *)&bin);
-}
-
-static char **canonicalize_path(const char *const path)
-{
-    /* Tokenize slash seperated words in path into tokens */
-    char **tokens = tokenize(path, '/');
-    return tokens;
-}
-
-/* Filesystem operations */
-
-void vfs_registerfs(fs_t *fs)
-{
-    if(!fs)
+    if (!fs)
         panic("vfs_registerfs: failled to register file system");
     fs_list_t *next;
     if (!(next = (fs_list_t *)kmalloc(sizeof(fs_list_t))))
-        panic("vfs_registerfs: out of memory");
+        panic("vfs_registerfs: out of memory!");
     memset((void *)next, 0, sizeof(fs_list_t));
-    kprintfOKmsg("registering filesystem [%s]...\n", fs->name);
     next->next = registered_fs;
-    next->fs = fs;
-    next->ready = 0;
+    next->type = fs;
     registered_fs = next;
-}
-
-int vfs_mount_root(inode_t *root)
-{
-    if (!root)
-        return -EINVAL;
-    kprintfOKmsg("mounting vfs root @[%s]...\n", root->name);
-    /* TODO Flush mountpoints */
-    vfs_root.node = root;
-    memset((void *)vfs_root.children, 0, sizeof(hash_node_t) * VFS_HASHMAX);
+    kprintfOKmsg("vfs_registerfs: registered filesystem [%s]\n", fs->fs_name);
     return 0;
 }
 
-int vfs_mount(const char *type __unused, const char *dir __unused, int flags __unused, inode_t *inode __unused)
+int vfs_mount_root(dentry_t *root)
 {
-    return -EINVAL;
+    int err =0;
+    kprintfOKmsg("flushing vroot...\n");
+
+    if(!root){
+        kprintfailure("can't flush vroot: couldn't find root");
+        return -EINVAL;
+    }
+
+    vroot =  root;
+
+    if(!vroot->dchildren)
+    {
+        vroot->dchildren = mkhash_table(DCACHE_COUNT);
+        if (!vroot->dchildren){
+            err = -ENOMEM;
+            goto error;
+        }
+    }
+
+    memset((void *)vroot->dchildren, 0, sizeof(*vroot->dchildren));
+    vroot->populated =0;
+    vroot->sync_pending =1;
+
+    /*if(err = vfs_populate_dir(vroot)){
+        kprintfailure("couldn't flush vroot\n");
+        goto error;
+    }*/
+
+    return 0;
+
+error:
+    if(vroot){
+        if(vroot->dchildren)
+            kfree(vroot->dchildren);
+        kfree(vroot);
+    }
+
+    return err;
 }
 
-int vfs_unmount(const char *type __unused, const char *dir __unused, inode_t *inode __unused)
+int vfs_populate_dir(dentry_t *dentry)
 {
-    return -EINVAL;
+    int err =0;
+    if(!dentry){ err = -EINVAL; goto error; }
+
+    //vfs_iread(dentry->dnode, 0, dentry->dnode->isize, (void *)dentry->dchildren);
+    return 0;
+error:
+    return err;
 }
 
-//!Path resolution and lookup
+/*         *****            */
+/*      VFS HELPERS         */
+/*         *****            */
 
-int vfs_parse_path(const char *path, const char **abs_path)
+struct path *vfs_get_mountpoint();
+
+int vfs_find(dentry_t *parent, const char *name, dentry_t **child)
 {
+    int err =0;
+    if(!parent || !parent->dnode)
+    { kprintfailure("vfind: !dnode\n"); err = -EINVAL; goto error;}
+    if(!parent->dnode->isb || !parent->dnode->isb->sfstype || !parent->dnode->isb->sfstype->iops.ifind)
+    { kprintfailure("vfind: !ifind\n"); err = -ENOSYS; goto error;}
+
+    /*do name-syntax check here*/
+    if(!name){ err = -ENOTNAM; goto error;}
+
+    if(parent->dnode->itype != DIR) { err = -ENOTDIR; goto error;}
+    if(!parent->dchildren) { err = -EINVAL; goto error;}
+    /*do cache traversal*/
+    int hkey = mkhashkey_str(name);
+    dentry_t *dentry = (dentry_t *)hash_search(parent->dchildren, DCACHE_COUNT, hkey);
+
+    if(!dentry){
+        kprintfailure("vfind: %s not in cache\n", name);
+        parent->cache_misses++;
+        /*if cache misses > 8, cache it*/
+        if(err = parent->dnode->isb->sfstype->iops.ifind(parent, name, &dentry)){ goto error;}
+        hash_insert(parent->dchildren, DCACHE_COUNT, hkey, (void *)dentry);
+    }
+    else kprintfOKmsg("vfind: %s present in cache\n", name);
+
+    if(child)
+        *child = dentry;
+    
+    return 0;
+
+error:
+    return err;
+}
+
+int vfs_parse_path(const char *path, const char *cwd, const char **abs_path)
+{
+
+    kprintfOKmsg("parsing path:%s\n", path);
     if (!path || !*path)
-    return -ENOENT;
+        return -ENOENT;
 
-    char *cwd = cur_usr->cwd;
-    if ((*path == '/'))
-    cwd = "/";
+    if (*path == '/')
+    { /* Absolute path */
+        cwd = "/";
+    }
+    
 
     size_t cwd_len = strlen(cwd), path_len = strlen(path);
     char *buf = kmalloc(cwd_len + path_len + 2);
 
-    if (strcmp(cwd, "/"))
-        memcpy(buf, cwd, cwd_len);
-    else
-        cwd_len =0;
+    memcpy(buf, cwd, cwd_len);
+
 
     buf[cwd_len] = '/';
     memcpy(buf + cwd_len + 1, path, path_len);
     buf[cwd_len + path_len + 1] = 0;
 
     /* Tokenize slash seperated words in path into tokens */
-    char **tokens = canonicalize_path(buf);
+    char **tokens = tokenize(buf, '/');
     char *out = kmalloc(cwd_len + path_len + 1);
 
     char *valid_tokens[512];
@@ -134,11 +172,12 @@ int vfs_parse_path(const char *path, const char **abs_path)
                 valid_tokens[--i] = NULL;
         }
         else
+        {
             valid_tokens[i++] = token;
+        }
     }
 
     valid_tokens[i] = NULL;
-
 
     out[0] = '/';
 
@@ -152,7 +191,6 @@ int vfs_parse_path(const char *path, const char **abs_path)
         ++j;
     }
 
-
     out[j > 1 ? --j : 1] = 0;
 
     free_tokens(tokens);
@@ -162,320 +200,264 @@ int vfs_parse_path(const char *path, const char **abs_path)
         *abs_path = out;
     else
         kfree(out);
+
     return 0;
 }
 
-static char *vfs_builtpath(char **tokens)
+int vfs_lookup(const char *path, dentry_t **dentry)
 {
-    int len=0, pos =1, count=0, tmp;
-    char *path;
-
-    foreach(token, tokens)
-    count++;
-    if(count> 1)
-    --count;
-    tmp = count;
-    foreach(token, tokens){
-        if(!count)
-            break;
-        len += strlen(token);
-        --count;
-    }
-    
-    count = tmp;
-
-    len += (count);
-    path = (char *)kmalloc(len);
-    *path ='/';
-    foreach(token, tokens){
-        if(!count)
-            break;
-        memcpy(path + pos, token, strlen(token));
-        pos += strlen(token);
-        path[pos++] = '/';
-        --count;
-    }
-    path[len] ='\0';
-    return path;
-}
-
-
-static struct vfs_path *vfs_get_mountpoint(char **tokens)
-{
-    struct vfs_path *path = kmalloc(sizeof(struct vfs_path));
-    path->tokens = tokens;
-    kprintfOKmsg("getting mountpoint...\n");
-
-    vfs_hash_t *cur_node = &vfs_root;
-    vfs_hash_t *last_target_node = cur_node;
-    vfs_hash_t *next_vfs_node = NULL;
-    size_t token_i = 0;
-    int check_last_node = 0;
-    
-    foreach (token, tokens)
+    int err =0;
+    if(!path)
     {
-        check_last_node = 0;
-
-        if (cur_node->node)
-        {
-            last_target_node = cur_node;
-            path->tokens = tokens + token_i;
-        }
-
-        if (cur_node->children)
-        {
-            int key = mkhashkey_str(token);
-
-            hash_node_t *tmphash = hash_search(cur_node->children, VFS_HASHMAX, key);
-            if (tmphash)
-            {
-                next_vfs_node = (vfs_hash_t *)tmphash->value;
-                cur_node = next_vfs_node;
-                check_last_node = 1;
-                goto next;
-            }
-            /* Not found, break! */
-            printf("\'%s/%s\': not a file or directory\n", cur_node->name, token);
-            break;
-        }
-        else
-        {
-            kprintfailure("\'%s\': has no children or is not a dir\n", cur_node->name);
-            /* No children, break! */
-            break;
-        }
-    next:;
-        ++token_i;
-    }
-
-    if (check_last_node && cur_node->node)
-    {
-        last_target_node = cur_node;
-        path->tokens = tokens + token_i;
-    }
-
-    path->mountpoint = last_target_node->node;
-
-    return path;
-}
-
-
-int vfs_lookup(const char *path, vnode_t *vnode, const char **abs_path)
-{
-    int ret = 0;
-    vfs_path_t *p = NULL;
-    char *tokens = NULL;
-    
-    /* if path is NULL pointer, or path is empty string, return ENOENT */
-    if (!path || !*path)
-    return -ENOENT;
-    
-    kprintfOKmsg("looking up %s\n", path);
-    char *_path = NULL;
-    if ((ret = vfs_parse_path(path, &_path))){
-        kprintfailure("failed to parse path\n");
+        kprintfailure("vfs_lookup: \"%s\" is not a file or directory\n");
+        err = -EINVAL;
         goto error;
     }
 
+    char *abs_path = NULL;
+    if(err = vfs_parse_path(path, "/", &abs_path)) { goto error;}
+    char **tokens = canonicalize_path(abs_path);
+    dentry_t *parent, *child = NULL, *cur = NULL;
 
-    kprintfOKmsg("parsed path \'%s\'\n", _path);
-    /* Canonicalize Path */
-    tokens = canonicalize_path(_path);
-
-    /* Get mountpoint & path */
-    p = vfs_get_mountpoint(tokens);
-
-    foreach(token, p->tokens)
-        printf("%s ", token);
-
-    printf("\n");
-    struct vnode dir, child;
-
-    dir.super = p->mountpoint;
-    dir.name = p->mountpoint->name;
-    dir.id = p->mountpoint->id;
-    dir.type = p->mountpoint->type;
-    child.super = p->mountpoint;
-    
-
-    foreach (token, p->tokens)
+    cur = parent = vroot;
+    foreach(token, tokens)
     {
-        if ((ret = vfs_vfind(&dir, token, &child))){
-            printf("goto error\n");
+        if((err = vfs_find(parent, token, &child)))
             goto error;
-        }
-        memcpy(&dir, &child, sizeof(dir));
+        if(!err)
+            goto found;
     }
 
+    found:
     free_tokens(tokens);
-    kfree(p);
-    memcpy(vnode, &dir, sizeof(dir));
-
-    printf("seting _path = %s\n", _path);
-    if (abs_path)
-        *abs_path = strdup(_path);
-
-    kfree(_path);
-
-#if 0
-    /* Resolve symbolic links */
-    if (dir.type == FS_SYMLINK && !(cur_usr->flags & O_NOFOLLOW))
-    {
-        /* TODO enforce limit */
-        char sym[1024];
-        struct inode *inode;
-        vfs_vget(&dir, &inode);
-        vfs_read(inode, 0, 1024, sym);
-        int ret = vfs_lookup(sym, uio, vnode, NULL);
-        vfs_close(inode);
-        return ret;
-    }
-#endif
-
+    if(dentry)
+        *dentry = child;
     return 0;
-
 error:
     if (tokens)
         free_tokens(tokens);
-    if (p)
-        kfree(p);
-    if (_path)
-        kfree(_path);
-
-    return ret;
+    return err;
 }
 
-int vfs_vget(struct vnode *vnode, struct inode **inode)
+#define ISDEV(inode) ((inode)->itype == CHRDEV || (inode)->itype == BLKDEV)
+
+size_t vfs_iread(struct inode *inode, size_t offset, size_t size, void *buf)
 {
-    if (!vnode || !vnode->super || !vnode->super->fs)
+    /* Invalid request */
+    if (!inode)
         return -EINVAL;
 
-    if (!vnode->super->fs->iops.vget)
+    /* Device node */
+    if (ISDEV(inode))
+        return kdev_read(&_INODE_DEV(inode), offset, size, buf);
+
+    /* Invalid request */
+    if (!inode->isb->sfstype)
+        return -EINVAL;
+
+    /* Operation not supported */
+    if (!inode->isb->sfstype->iops.iread)
         return -ENOSYS;
 
-    int ret = vnode->super->fs->iops.vget(vnode, inode);
+    return inode->isb->sfstype->iops.iread(inode, offset, size, buf);
+}
 
-    if (!ret && inode && *inode)
-    {
-        (*inode)->ref++;
+size_t vfs_iwrite(struct inode *inode, size_t offset, size_t size, void *buf)
+{
+    /* Invalid request */
+    if (!inode)
+        return -EINVAL;
+
+    /* Device node */
+    if (ISDEV(inode))
+        return kdev_write(&_INODE_DEV(inode), offset, size, buf);
+
+    /* Invalid request */
+    if (!inode->isb->sfstype)
+        return -EINVAL;
+
+    /* Operation not supported */
+    if (!inode->isb->sfstype->iops.iwrite)
+        return -ENOSYS;
+
+    return inode->isb->sfstype->iops.iwrite(inode, offset, size, buf);
+}
+
+int vfs_iclose(struct inode *inode)
+{
+    /* Invalid request */
+    if (!inode || !inode->isb->sfstype)
+        return -EINVAL;
+
+    /* Operation not supported */
+    if (!inode->isb->sfstype->iops.iclose)
+        return -ENOSYS;
+
+    --inode->iref;
+
+    if (inode->iref <= 0)
+    { /* Why < ? */
+        return inode->isb->sfstype->iops.iclose(inode);
     }
 
-    return ret;
+    return 0;
 }
 
-int vfs_vfind(struct vnode *parent, const char *name, struct vnode *child)
+int vfs_fopen(struct file *file)
 {
-    if (!parent || !parent->super || !parent->super->fs)
+    if (!file || !file->fnode || !file->fnode->isb || !file->fnode->isb->sfstype)
         return -EINVAL;
-    if (!parent->super->fs->iops.vfind)
+
+    if (file->fnode->itype == DIR && !(file->fflags & O_SEARCH))
+        return -EISDIR;
+
+    if (ISDEV(file->fnode))
+        return kdev_file_open(&_INODE_DEV(file->fnode), file);
+
+    if (!file->fnode->isb)
         return -ENOSYS;
-    if (parent->type != FS_DIR)
-        return -ENOTDIR;
 
-    return parent->super->fs->iops.vfind(parent, name, child);
-}
-
-//!file operations
-
-int vfs_fopen(file_t *file)
-{
-    if ((!file) || (!file->inode))
-        return -EINVAL;
-    if (ISDEV(file->inode))
-        return kdev_open(&_INODE_DEV(file->inode));
-    if (!file->inode->fs)
+    if (!file->fnode->isb->sfstype)
         return -ENOSYS;
-    if (!file->inode->fs->fops.open)
-        return -EINVAL;
-    return file->inode->fs->fops.open(file);
+
+    if (!file->fnode->isb->sfstype->fops.fopen)
+        return -ENOSYS;
+
+    return file->fnode->isb->sfstype->fops.fopen(file);
 }
 
 size_t vfs_fread(file_t *file, void *buf, size_t size)
 {
-    if ((!file) || (!file->inode))
+    if (!file || !file->fnode)
         return -EINVAL;
-    /*is dev*/
-    if (ISDEV(file->inode))
-        return kdev_read(&_INODE_DEV(file->inode), file->offset, size, buf);
-    /*if other file*/
-    if (!file->inode->fs)
+
+    if (ISDEV(file->fnode))
+        return kdev_file_read(&_INODE_DEV(file->fnode), file, buf, size);
+
+    if (!file->fnode->isb)
+        return -EINVAL;
+
+    if (!file->fnode->isb->sfstype)
         return -ENOSYS;
-    if (!file->inode->fs->fops.read)
-        return -EINVAL;
-    return file->inode->fs->fops.read(file, buf, size);
+
+    if (!file->fnode->isb->sfstype->fops.fread)
+        return -ENOSYS;
+    return file->fnode->isb->sfstype->fops.fread(file, buf, size);
 }
 
-size_t vfs_fwrite(file_t *file, void *buf, size_t size)
+size_t vfs_fwrite(struct file *file, void *buf, size_t nbytes)
 {
-    if ((!file) || (!file->inode))
+    if (!file || !file->fnode)
         return -EINVAL;
-    if (ISDEV(file->inode))
-        return kdev_write(&_INODE_DEV(file->inode),file->offset, size, buf);
-    if (!file->inode->fs)
+
+    if (ISDEV(file->fnode))
+        return kdev_file_write(&_INODE_DEV(file->fnode), file, buf, nbytes);
+
+    if (!file->fnode->isb)
+        return -EINVAL;
+
+    if (!file->fnode->isb->sfstype)
         return -ENOSYS;
-    if (!file->inode->fs->fops.write)
-        return -EINVAL;
-    return file->inode->fs->fops.write(file, buf, size);
+
+    if (!file->fnode->isb->sfstype->fops.fwrite)
+        return -ENOSYS;
+
+    return file->fnode->isb->sfstype->fops.fwrite(file, buf, nbytes);
 }
 
-int vfs_fclose(file_t *file)
+off_t vfs_flseek(struct file *file, off_t offset, int whence)
 {
-    if ((!file) || (!file->inode))
+    if (!file || !file->fnode)
         return -EINVAL;
-    if (ISDEV(file->inode))
-        return kdev_close(&_INODE_DEV(file->inode));
-    if ((!file->inode->fs))
+
+    if (ISDEV(file->fnode))
+        return kdev_file_lseek(&_INODE_DEV(file->fnode), file, offset, whence);
+
+    if (!file->fnode->isb)
+        return -EINVAL;
+
+    if (!file->fnode->isb->sfstype)
         return -ENOSYS;
-    if ((!file->inode->fs->fops.close))
-        return -EINVAL;
-    return file->inode->fs->fops.close(file);
+
+    if (!file->fnode->isb->sfstype->fops.flseek)
+        return -ENOSYS;
+
+    return file->fnode->isb->sfstype->fops.flseek(file, offset, whence);
 }
 
-
-//!inode operations mappings
-
-size_t vfs_iread(inode_t *inode, off_t offset, size_t size, void *buf)
+int vfs_fclose(struct file *file)
 {
-    if((!inode) || (!size) || (!buf))
+    if (!file || !file->fnode)
         return -EINVAL;
-    if(ISDEV(inode))
-        return kdev_read(&_INODE_DEV(inode), offset, size, buf);
-    if(!inode->fs)
+
+    if (ISDEV(file->fnode))
+        return kdev_file_close(&_INODE_DEV(file->fnode), file);
+
+    if (!file->fnode->isb)
+        return -EINVAL;
+
+    if (!file->fnode->isb->sfstype)
         return -ENOSYS;
-    if(!inode->fs->iops.iread)
-        return -EINVAL;
-    return inode->fs->iops.iread(inode, offset, size, buf);
+
+    if (!file->fnode->isb->sfstype->fops.fclose)
+        return -ENOSYS;
+
+    return file->fnode->isb->sfstype->fops.fclose(file);
 }
 
-size_t vfs_iwrite(inode_t *inode, off_t offset, size_t size, void *buf)
+int vfs_fcan_read(struct file *file, size_t size)
 {
-    if((!inode) || (!size) || (!buf))
+    if (!file || !file->fnode)
         return -EINVAL;
-    if(ISDEV(inode))
-        return kdev_write(&_INODE_DEV(inode), offset, size, buf);
-    if(!inode->fs)
+
+    if (ISDEV(file->fnode))
+        return kdev_file_can_read(&_INODE_DEV(file->fnode), file, size);
+
+    if (!file->fnode->isb)
+        return -EINVAL;
+
+    if (!file->fnode->isb->sfstype)
         return -ENOSYS;
-    if(!inode->fs->iops.iwrite)
-        return -EINVAL;
-    return inode->fs->iops.iwrite(inode, offset, size, buf);
+
+    if (!file->fnode->isb->sfstype->fops.fcan_read)
+        return -ENOSYS;
+
+    return file->fnode->isb->sfstype->fops.fcan_read(file, size);
 }
 
-int vfs_iclose(inode_t *inode)
+int vfs_fcan_write(struct file *file, size_t size)
 {
-    if(!inode)
+    if (!file || !file->fnode)
         return -EINVAL;
-    if(ISDEV(inode))
-        return kdev_close(&_INODE_DEV(inode));
-    if(!inode->fs)
+
+    if (ISDEV(file->fnode))
+        return kdev_file_can_write(&_INODE_DEV(file->fnode), file, size);
+
+    if (!file->fnode->isb)
+        return -EINVAL;
+
+    if (!file->fnode->isb->sfstype)
         return -ENOSYS;
-    if(!inode->fs->iops.iclose)
-        return -EINVAL;
-    return inode->fs->iops.iclose(inode);
+
+    if (!file->fnode->isb->sfstype->fops.fcan_write)
+        return -ENOSYS;
+
+    return file->fnode->isb->sfstype->fops.fcan_write(file, size);
 }
 
-/* Higher level functions */
-
-int vfs_creat(const char *path __unused, inode_t **ref __unused)
+int vfs_feof(struct file *file)
 {
-    return -EINVAL;
+    if (!file || !file->fnode)
+        return -EINVAL;
+
+    if (ISDEV(file->fnode))
+        return kdev_file_eof(&_INODE_DEV(file->fnode), file);
+
+    if (!file->fnode->isb)
+        return -EINVAL;
+
+    if (!file->fnode->isb->sfstype)
+        return -ENOSYS;
+
+    return file->fnode->isb->sfstype->fops.eof(file);
 }

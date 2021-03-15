@@ -1,11 +1,11 @@
 #include <stdio.h>
-#include <sys\errno.h>
-#include <fs\vfs.h>
-#include <sys\panic.h>
-#include <sys\thread.h>
-#include <arch\x86\cpu\isrs.h>
-#include <arch\x86\cpu\regs.h>
-#include <arch\x86\cpu\context.h>
+#include <sys/errno.h>
+#include <fs/fs.h>
+#include <sys/panic.h>
+#include <sys/thread.h>
+#include <arch/x86/cpu/isrs.h>
+#include <arch/x86/cpu/regs.h>
+#include <arch/x86/cpu/context.h>
 
 #define max_syscalls 0
 
@@ -17,12 +17,7 @@ void x86_syscall_return(thread_t *t __unused, int ret_val __unused)
 
 void sys_open(const char *path __unused, mode_t mode __unused)
 {
-    int ret = proc_get_fd(cur_thread->owner);
-    if( ret == -1)
-    {
-        x86_syscall_return(cur_thread, -ENOFDS);
-        return ;
-    }
+    
 }
 
 void sys_read(int fd __unused, void *buf __unused, size_t size __unused)

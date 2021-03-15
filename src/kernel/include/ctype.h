@@ -20,7 +20,7 @@ extern int isspace(int c);
 extern char *tolowerstr(const char str0[]);
 //convert string to uppercase
 extern char *toupperstr(const char str0[]);
-
+extern char *strtoupper(char *dest, const char *str0);
 //is char an alphabetic char
 #define isletter isalpha
 

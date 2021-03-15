@@ -2,8 +2,8 @@
 # define SYS_HASH_H
 #include <stdio.h>
 #include <string.h>
-#include <sys\panic.h>
-#include <mm\kmalloc.h>
+#include <sys/panic.h>
+#include <mm/kmalloc.h>
 
 typedef struct hash{
     int key;
@@ -13,7 +13,7 @@ typedef struct hash{
     struct hash *next;
 }hash_node_t;
 
-static void hash_dump_node(hash_node_t *node)
+static inline void hash_dump_node(hash_node_t *node)
 {
     if(!node){
         printf("(nul)");
@@ -22,14 +22,14 @@ static void hash_dump_node(hash_node_t *node)
     hash_dump_node(node->next);
 }
 
-static int hash_func(int key, int nelems)
+static inline int hash_func(int key, int nelems)
 {
     key += nelems;
     key %= nelems;
     return key;
 }
 
-static int mkhashkey_str(const char *s)
+static inline int mkhashkey_str(const char *s)
 {
     /**
      * !this is either a smart or really stupid implementation*
@@ -46,7 +46,7 @@ static int mkhashkey_str(const char *s)
     return sum;
 }
 
-static hash_node_t *hash_search(hash_node_t *table, int nelems, int key)
+static inline hash_node_t *hash_search(hash_node_t *table, int nelems, int key)
 {
     int i = hash_func(key, nelems);
     hash_node_t * tmp = &table[i];
@@ -59,7 +59,7 @@ static hash_node_t *hash_search(hash_node_t *table, int nelems, int key)
     return 0;
 }
 
-static void hash_insert(hash_node_t *table, int nelems, int key, void *value)
+static inline void hash_insert(hash_node_t *table, int nelems, int key, void *value)
 {
     int i = hash_func(key, nelems);
     if(!table[i].used){
@@ -83,7 +83,7 @@ static void hash_insert(hash_node_t *table, int nelems, int key, void *value)
     }
 }
 
-static void hash_delete(hash_node_t * node)
+static inline void hash_delete(hash_node_t * node)
 {
     if(node){
         hash_node_t *x = node->next;
@@ -106,7 +106,7 @@ static void hash_delete(hash_node_t * node)
     }
 }
 
-static hash_node_t *mkhash_table(int nelems)
+static inline hash_node_t *mkhash_table(int nelems)
 {
     hash_node_t *table = (hash_node_t *)kcalloc(nelems, sizeof(*table));
     if(!table)

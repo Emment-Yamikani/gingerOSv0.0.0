@@ -57,5 +57,8 @@ extern void kprintprompt(const char *usr, const char *cwd);
 extern void _KprintOK();
 extern int kprintfOKmsg(const char *fmt, ...);
 extern int kprintfailure(const char *fmt, ...);
+extern char **canonicalize_path(const char *const path);
 
+#include <dev/console/console.h>
+extern int kprintemphasis(color_t color, const char *fmt, ...);
 #endif

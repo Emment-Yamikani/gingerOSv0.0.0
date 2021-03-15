@@ -1,6 +1,7 @@
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdarg.h>
+#include <stdbool.h>
 
 typedef unsigned char color_t;
 extern int console_write(char *buf, int size);
@@ -43,11 +44,17 @@ int puts(char *__s)
 
 static char hexadecimal[32] = {0};
 static char result[256] = {0};
-char *int_str(unsigned int n, int space, int type, int base)
+char *int_str(unsigned int n, int space, int type, int _signed, int base)
 {
     memset(result, 0, sizeof(result));
     memset(hexadecimal, 0, sizeof(hexadecimal));
-
+    int signflag =0;
+    if (_signed && ((signed int)n < 1))
+    {
+        n = ~n;
+        n += 1;
+        signflag = 1;
+    }
     if (base == BIN)
         strcpy(hexadecimal, "01");
     else if (base == OCT)
@@ -122,6 +129,8 @@ char *int_str(unsigned int n, int space, int type, int base)
         count++;
         break;
     }
+    if(signflag)
+        result[count++] = '-';
     reverse(result);
     result[--count] = '\0';
     return result;
@@ -179,13 +188,17 @@ int printf(const char *fmt, ...)
         {
         case 'b':
             _int = va_arg(ap, unsigned int);
-            str = int_str(_int, 1, 0, BIN);
+            str = int_str(_int, 1, 0, false, BIN);
+            len += puts(str);
+            break;
+        case 'd':
+            _int = va_arg(ap, unsigned int);
+            str = int_str(_int, 1, 0, true, DEC);
             len += puts(str);
             break;
         case 'D':
-        case 'd':
             _int = va_arg(ap, unsigned int);
-            str = int_str(_int, 1, 0, DEC);
+            str = int_str(_int, 1, 0, false, DEC);
             len += puts(str);
             break;
         case 'f':
@@ -195,18 +208,18 @@ int printf(const char *fmt, ...)
             break;
         case 'o':
             _int = va_arg(ap, unsigned int);
-            str = int_str(_int, 1, 0, OCT);
+            str = int_str(_int, 1, 0, false, OCT);
             len += puts(str);
             break;
         case 'p':
         case 'x':
             _int = va_arg(ap, unsigned int);
-            str = int_str(_int, 0, 0, HEX);
+            str = int_str(_int, 0, 0, false, HEX);
             len += puts(str);
             break;
         case 'X':
             _int = va_arg(ap, unsigned int);
-            str = int_str(_int, 0, 1, HEX);
+            str = int_str(_int, 0, 1, false, HEX);
             len += puts(str);
             break;
         case 's':

@@ -2,7 +2,7 @@
 # define SYS_USR_H
 
 
-typedef struct usr{
+typedef struct _usr{
     char *name;
     char *rootdir;
     char *cwd;
@@ -12,6 +12,7 @@ typedef struct usr{
     int mask;
     int sys:1;
 }usr_t;
+
 
 extern usr_t *cur_usr;
 

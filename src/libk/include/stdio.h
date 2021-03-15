@@ -15,7 +15,7 @@ int printf(const char* __restrict, ...);
 int putchar(int);
 //print a string of text
 int puts(const char*);
-char *int_str(unsigned int n, int space, int type, int base);
+char *int_str(unsigned int n, int space, int type, int _signed, int base);
 #ifdef __cplusplus
 }
 #endif
